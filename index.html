@@ -164,7 +164,7 @@ if (!SR) {
 }
 
 $('lang').value = load('lt-lang') || 'en-US';
-$('to').value = load('lt-to') ?? 'en';
+$('to').value = load('lt-to') || '';
 
 function stamp() {
   const s = Math.floor((Date.now() - startedAt) / 1000);
@@ -199,11 +199,8 @@ function fillLine(e) {
   const main = document.createElement('span');
   if (to && e.tr && e.tr[to]) {
     main.textContent = e.tr[to];
-    e.el.append(main);
-    if (e.tr[to] !== e.text) {
-      const o = document.createElement('span'); o.className = 'orig'; o.textContent = e.text;
-      e.el.append(o);
-    }
+    const o = document.createElement('span'); o.className = 'orig'; o.textContent = e.text;
+    e.el.append(main, o);
   } else {
     main.textContent = e.text;
     e.el.append(main);
