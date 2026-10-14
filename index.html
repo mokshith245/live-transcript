@@ -50,7 +50,13 @@
   }
   #transcript { max-width: 760px; margin: 0 auto; }
   .line { margin: 0 0 10px; display: flex; gap: 12px; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+  .line { position: relative; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
   .line:active, .line.copied { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .badge {
+    position: absolute; right: 6px; top: 4px; font-size: 12px; font-weight: 600;
+    background: var(--ok); color: #fff; padding: 2px 8px; border-radius: 99px; display: none;
+  }
+  .line.copied .badge { display: block; }
   .time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 4px; flex-shrink: 0; }
   .text { min-width: 0; overflow-wrap: anywhere; }
   #interim { color: var(--interim); font-style: italic; margin: 0 6px; }
@@ -92,7 +98,7 @@
 </header>
 <main id="scroller">
   <div id="transcript">
-    <p class="empty" id="empty">Tap <b>Start</b> and begin speaking.<br>Tap any line to copy just that line.</p>
+    <p class="empty" id="empty">Tap <b>Start</b> and begin speaking.<br>Tap any line to copy it.</p>
     <div id="lines"></div>
     <p id="interim"></p>
   </div>
@@ -135,10 +141,12 @@ function renderLine(entry) {
   p.className = 'line';
   const t = document.createElement('span'); t.className = 'time'; t.textContent = entry.time;
   const x = document.createElement('span'); x.className = 'text'; x.textContent = entry.text;
-  p.append(t, x);
+  const b = document.createElement('span'); b.className = 'badge'; b.textContent = 'Copied ✓';
+  p.append(t, x, b);
   p.onclick = () => copyText(entry.text, () => {
-    p.classList.add('copied'); setTimeout(() => p.classList.remove('copied'), 700);
-    statusEl.textContent = 'Line copied';
+    document.querySelectorAll('.line.copied').forEach(l => l.classList.remove('copied'));
+    p.classList.add('copied'); setTimeout(() => p.classList.remove('copied'), 1500);
+    statusEl.textContent = `Copied line at ${entry.time}`;
   });
   linesEl.appendChild(p);
 }
@@ -231,19 +239,28 @@ function plainText() {
   return entries.map(e => e.text).join('\n');
 }
 
-async function copyText(text, onDone) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.setAttribute('readonly', '');
-    ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select(); ta.setSelectionRange(0, text.length);
-    document.execCommand('copy');
-    ta.remove();
+// Fallback copy; must run inside the tap itself or iPhone refuses it.
+function copyViaTextarea(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.setAttribute('readonly', '');
+  ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.fontSize = '16px';
+  document.body.appendChild(ta);
+  ta.select(); ta.setSelectionRange(0, text.length);
+  const ok = document.execCommand('copy');
+  ta.remove();
+  return ok;
+}
+
+function copyText(text, onDone) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(
+      () => onDone && onDone(),
+      () => { statusEl.textContent = 'Copy failed. Try again.'; });
+  } else if (copyViaTextarea(text)) {
+    onDone && onDone();
+  } else {
+    statusEl.textContent = 'Copy failed. Try again.';
   }
-  onDone && onDone();
 }
 
 $('toggle').onclick = () => listening ? stop() : start();
