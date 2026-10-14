@@ -31,11 +31,16 @@
     display: flex; flex-direction: column;
   }
   header {
-    display: flex; gap: 10px; align-items: center;
+    display: flex; flex-direction: column; gap: 10px;
     padding: calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
     border-bottom: 1px solid var(--border); background: var(--panel);
   }
-  h1 { font-size: 17px; margin: 0 auto 0 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  h1 { font-size: 17px; margin: 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .langs { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; }
+  .langs label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
+  .langs select { width: 100%; }
+  .arrow { color: var(--muted); padding-top: 14px; }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
   .dot.on { background: var(--rec); animation: pulse 1.2s infinite; }
   @keyframes pulse { 50% { opacity: .3; } }
@@ -52,7 +57,9 @@
   .line { margin: 0 0 10px; display: flex; gap: 12px; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
   .line:active, .line.copied { background: color-mix(in srgb, var(--accent) 14%, transparent); }
   .time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 4px; flex-shrink: 0; }
-  .text { min-width: 0; overflow-wrap: anywhere; }
+  .text { min-width: 0; overflow-wrap: anywhere; display: flex; flex-direction: column; }
+  .orig { color: var(--muted); font-size: 14px; }
+  .pending { color: var(--interim); font-style: italic; }
   #interim { color: var(--interim); font-style: italic; margin: 0 6px; }
   .empty { color: var(--muted); text-align: center; margin-top: 12vh; padding: 0 12px; }
   footer {
@@ -77,18 +84,52 @@
 <body>
 <header>
   <h1><span class="dot" id="dot"></span>Live Transcript</h1>
-  <select id="lang" title="Language" aria-label="Language">
-    <option value="en-US">English (US)</option>
-    <option value="en-IN">English (India)</option>
-    <option value="en-GB">English (UK)</option>
-    <option value="hi-IN">Hindi</option>
-    <option value="te-IN">Telugu</option>
-    <option value="ta-IN">Tamil</option>
-    <option value="kn-IN">Kannada</option>
-    <option value="es-ES">Spanish</option>
-    <option value="fr-FR">French</option>
-    <option value="de-DE">German</option>
-  </select>
+  <div class="langs">
+    <label>Speak in
+      <select id="lang">
+        <option value="en-US">English (US)</option>
+        <option value="en-IN">English (India)</option>
+        <option value="en-GB">English (UK)</option>
+        <option value="hi-IN">Hindi</option>
+        <option value="te-IN">Telugu</option>
+        <option value="ta-IN">Tamil</option>
+        <option value="kn-IN">Kannada</option>
+        <option value="ml-IN">Malayalam</option>
+        <option value="mr-IN">Marathi</option>
+        <option value="bn-IN">Bengali</option>
+        <option value="gu-IN">Gujarati</option>
+        <option value="ur-IN">Urdu</option>
+        <option value="es-ES">Spanish</option>
+        <option value="fr-FR">French</option>
+        <option value="de-DE">German</option>
+        <option value="ar-SA">Arabic</option>
+        <option value="zh-CN">Chinese</option>
+        <option value="ja-JP">Japanese</option>
+      </select>
+    </label>
+    <span class="arrow" aria-hidden="true">→</span>
+    <label>Translate to
+      <select id="to">
+        <option value="">No translation</option>
+        <option value="en">English</option>
+        <option value="hi">Hindi</option>
+        <option value="te">Telugu</option>
+        <option value="ta">Tamil</option>
+        <option value="kn">Kannada</option>
+        <option value="ml">Malayalam</option>
+        <option value="mr">Marathi</option>
+        <option value="bn">Bengali</option>
+        <option value="gu">Gujarati</option>
+        <option value="ur">Urdu</option>
+        <option value="es">Spanish</option>
+        <option value="fr">French</option>
+        <option value="de">German</option>
+        <option value="ar">Arabic</option>
+        <option value="zh-CN">Chinese</option>
+        <option value="ja">Japanese</option>
+      </select>
+    </label>
+  </div>
 </header>
 <main id="scroller">
   <div id="transcript">
@@ -123,6 +164,7 @@ if (!SR) {
 }
 
 $('lang').value = load('lt-lang') || 'en-US';
+$('to').value = load('lt-to') || '';
 
 function stamp() {
   const s = Math.floor((Date.now() - startedAt) / 1000);
@@ -134,28 +176,94 @@ function renderLine(entry) {
   const p = document.createElement('p');
   p.className = 'line';
   const t = document.createElement('span'); t.className = 'time'; t.textContent = entry.time;
-  const x = document.createElement('span'); x.className = 'text'; x.textContent = entry.text;
+  const x = document.createElement('span'); x.className = 'text';
   p.append(t, x);
-  p.onclick = () => copyText(entry.text, () => {
+  entry.el = x;
+  fillLine(entry);
+  p.onclick = () => copyText(shown(entry), () => {
     p.classList.add('copied'); setTimeout(() => p.classList.remove('copied'), 700);
     statusEl.textContent = 'Line copied';
   });
   linesEl.appendChild(p);
 }
 
+// What a line shows (and copies): the translation when one is on, else the original.
+function shown(e) {
+  const to = $('to').value;
+  return to && e.tr && e.tr[to] ? e.tr[to] : e.text;
+}
+
+function fillLine(e) {
+  const to = $('to').value;
+  e.el.textContent = '';
+  const main = document.createElement('span');
+  if (to && e.tr && e.tr[to]) {
+    main.textContent = e.tr[to];
+    const o = document.createElement('span'); o.className = 'orig'; o.textContent = e.text;
+    e.el.append(main, o);
+  } else {
+    main.textContent = e.text;
+    e.el.append(main);
+    if (to) {
+      const w = document.createElement('span'); w.className = 'orig pending';
+      w.textContent = e.failed === to ? 'Translation failed' : 'Translating…';
+      e.el.append(w);
+    }
+  }
+}
+
+// --- Translation: Google's free endpoint, MyMemory as a fallback.
+async function translate(text, from, to) {
+  try {
+    const r = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&dt=t'
+      + `&sl=${encodeURIComponent(from)}&tl=${encodeURIComponent(to)}&q=${encodeURIComponent(text)}`);
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    return j[0].map(seg => seg[0]).join('');
+  } catch {
+    const r = await fetch('https://api.mymemory.translated.net/get?mt=1'
+      + `&langpair=${encodeURIComponent(from)}|${encodeURIComponent(to)}&q=${encodeURIComponent(text)}`);
+    const j = await r.json();
+    if (j.responseStatus !== 200) throw new Error(j.responseDetails);
+    return j.responseData.translatedText;
+  }
+}
+
+// One request at a time, in order, so lines don't arrive shuffled or hit rate limits.
+let queue = Promise.resolve();
+function translateEntry(e) {
+  const to = $('to').value;
+  const from = (e.lang || $('lang').value).split('-')[0];
+  if (!to || (e.tr && e.tr[to])) return;
+  if (from === to.split('-')[0]) { e.tr = { ...e.tr, [to]: e.text }; fillLine(e); return; }
+  queue = queue.then(async () => {
+    if ($('to').value !== to) return;
+    try {
+      e.tr = { ...e.tr, [to]: await translate(e.text, from, to) };
+      delete e.failed;
+      save();
+    } catch {
+      e.failed = to;
+      statusEl.textContent = 'Translation failed — check your internet connection';
+    }
+    fillLine(e);
+  });
+}
+
 function addLine(text) {
   text = text.trim();
   if (!text) return;
   text = text[0].toUpperCase() + text.slice(1);
-  const entry = { time: stamp(), text };
+  const entry = { time: stamp(), text, lang: $('lang').value };
   entries.push(entry);
   renderLine(entry);
+  translateEntry(entry);
   save();
   updateCount();
   scrollDown();
 }
 
-function save() { store('lt-entries', JSON.stringify(entries)); }
+function save() { store('lt-entries', JSON.stringify(entries, (k, v) => k === 'el' ? undefined : v)); }
 
 function updateCount() {
   const n = entries.reduce((a, e) => a + e.text.split(/\s+/).length, 0);
@@ -228,7 +336,7 @@ function setUI(on, keepStatus) {
 }
 
 function plainText() {
-  return entries.map(e => e.text).join('\n');
+  return entries.map(shown).join('\n');
 }
 
 async function copyText(text, onDone) {
@@ -276,6 +384,11 @@ $('clear').onclick = () => {
   statusEl.textContent = 'Cleared';
 };
 
+$('to').onchange = () => {
+  store('lt-to', $('to').value);
+  entries.forEach(e => { if (e.failed) delete e.failed; fillLine(e); translateEntry(e); });
+};
+
 $('lang').onchange = () => {
   store('lt-lang', $('lang').value);
   if (listening) { stop(); start(); }
@@ -290,7 +403,7 @@ document.addEventListener('keydown', e => {
 // Restore the previous transcript after a reload.
 try { entries = JSON.parse(load('lt-entries') || '[]'); } catch { entries = []; }
 startedAt = Number(load('lt-start')) || (entries.length ? Date.now() : null);
-entries.forEach(renderLine);
+entries.forEach(e => { renderLine(e); translateEntry(e); });
 updateCount();
 scrollDown();
 </script>
