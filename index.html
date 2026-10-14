@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Transcript">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141416" media="(prefers-color-scheme: dark)">
+<title>Live Transcript</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73;
+    --border: #e3e3e0; --accent: #2563eb; --rec: #dc2626; --interim: #9a9aa0;
+    --ok: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416; --panel: #1c1c1f; --text: #f2f2f4; --muted: #9a9aa2;
+      --border: #2c2c31; --accent: #60a5fa; --rec: #f87171; --interim: #6b6b72;
+      --ok: #4ade80; color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; gap: 10px; align-items: center;
+    padding: calc(10px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left));
+    border-bottom: 1px solid var(--border); background: var(--panel);
+  }
+  h1 { font-size: 17px; margin: 0 auto 0 0; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--rec); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .dot.on { animation: none; } }
+  select {
+    font: inherit; font-size: 14px; padding: 7px 10px; border-radius: 9px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  }
+  main {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 20px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left));
+  }
+  #transcript { max-width: 760px; margin: 0 auto; }
+  .line { margin: 0 0 10px; display: flex; gap: 12px; padding: 4px 6px; border-radius: 8px; cursor: pointer; }
+  .line:active, .line.copied { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  .time { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; padding-top: 4px; flex-shrink: 0; }
+  .text { min-width: 0; overflow-wrap: anywhere; }
+  #interim { color: var(--interim); font-style: italic; margin: 0 6px; }
+  .empty { color: var(--muted); text-align: center; margin-top: 12vh; padding: 0 12px; }
+  footer {
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 10px; gap: 10px; }
+  #status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; max-width: 760px; margin: 0 auto; }
+  .big {
+    font: inherit; font-weight: 600; font-size: 17px; padding: 14px 10px; border-radius: 14px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer;
+  }
+  #toggle { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #toggle.on { background: var(--rec); border-color: var(--rec); }
+  #copy.done { background: var(--ok); border-color: var(--ok); color: #fff; }
+  #clear { padding: 14px 16px; color: var(--muted); font-weight: 500; }
+  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button:disabled { opacity: .5; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="dot"></span>Live Transcript</h1>
+  <select id="lang" title="Language" aria-label="Language">
+    <option value="en-US">English (US)</option>
+    <option value="en-IN">English (India)</option>
+    <option value="en-GB">English (UK)</option>
+    <option value="hi-IN">Hindi</option>
+    <option value="te-IN">Telugu</option>
+    <option value="ta-IN">Tamil</option>
+    <option value="kn-IN">Kannada</option>
+    <option value="es-ES">Spanish</option>
+    <option value="fr-FR">French</option>
+    <option value="de-DE">German</option>
+  </select>
+</header>
+<main id="scroller">
+  <div id="transcript">
+    <p class="empty" id="empty">Tap <b>Start</b> and begin speaking.<br>Tap any line to copy just that line.</p>
+    <div id="lines"></div>
+    <p id="interim"></p>
+  </div>
+</main>
+<footer>
+  <div class="meta"><span id="status">Ready</span><span id="count">0 words</span></div>
+  <div class="actions">
+    <button class="big" id="toggle">Start</button>
+    <button class="big" id="copy">Copy</button>
+    <button class="big" id="clear">Clear</button>
+  </div>
+</footer>
+
+<script>
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const $ = id => document.getElementById(id);
+const linesEl = $('lines'), interimEl = $('interim'), statusEl = $('status');
+
+let recognition = null, listening = false, startedAt = null, sessionFinals = 0;
+let entries = [];
+
+function store(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function load(k) { try { return localStorage.getItem(k); } catch { return null; } }
+
+if (!SR) {
+  statusEl.textContent = 'Speech recognition not supported here. Use Safari on iPhone or Chrome on desktop.';
+  $('toggle').disabled = true;
+}
+
+$('lang').value = load('lt-lang') || 'en-US';
+
+function stamp() {
+  const s = Math.floor((Date.now() - startedAt) / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function renderLine(entry) {
+  $('empty').style.display = 'none';
+  const p = document.createElement('p');
+  p.className = 'line';
+  const t = document.createElement('span'); t.className = 'time'; t.textContent = entry.time;
+  const x = document.createElement('span'); x.className = 'text'; x.textContent = entry.text;
+  p.append(t, x);
+  p.onclick = () => copyText(entry.text, () => {
+    p.classList.add('copied'); setTimeout(() => p.classList.remove('copied'), 700);
+    statusEl.textContent = 'Line copied';
+  });
+  linesEl.appendChild(p);
+}
+
+function addLine(text) {
+  text = text.trim();
+  if (!text) return;
+  text = text[0].toUpperCase() + text.slice(1);
+  const entry = { time: stamp(), text };
+  entries.push(entry);
+  renderLine(entry);
+  save();
+  updateCount();
+  scrollDown();
+}
+
+function save() { store('lt-entries', JSON.stringify(entries)); }
+
+function updateCount() {
+  const n = entries.reduce((a, e) => a + e.text.split(/\s+/).length, 0);
+  $('count').textContent = `${n} word${n === 1 ? '' : 's'}`;
+}
+
+function scrollDown() { const m = $('scroller'); m.scrollTop = m.scrollHeight; }
+
+function start() {
+  recognition = new SR();
+  recognition.lang = $('lang').value;
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  sessionFinals = 0;
+
+  // Walk all results each time: Safari sometimes re-sends earlier ones,
+  // so only add finals we haven't seen in this session.
+  recognition.onresult = e => {
+    let interim = '';
+    let finals = 0;
+    for (let i = 0; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) {
+        finals++;
+        if (finals > sessionFinals) { addLine(r[0].transcript); sessionFinals = finals; }
+      } else interim += r[0].transcript;
+    }
+    interimEl.textContent = interim;
+    scrollDown();
+  };
+
+  recognition.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    statusEl.textContent = e.error === 'not-allowed' || e.error === 'service-not-allowed'
+      ? 'Microphone blocked. Allow it (Settings › Safari › Microphone) and try again.'
+      : `Error: ${e.error}`;
+    if (['not-allowed', 'service-not-allowed', 'network'].includes(e.error)) stop(true);
+  };
+
+  // Recognition ends after silence or a time limit; restart while listening.
+  recognition.onend = () => {
+    if (!listening) return;
+    // keep any half-heard words
+    if (interimEl.textContent.trim()) { addLine(interimEl.textContent); interimEl.textContent = ''; }
+    sessionFinals = 0;
+    try { recognition.start(); } catch { setTimeout(() => listening && recognition.start(), 300); }
+  };
+
+  if (!startedAt) startedAt = Date.now();
+  store('lt-start', String(startedAt));
+  listening = true;
+  recognition.start();
+  setUI(true);
+}
+
+function stop(keepStatus) {
+  listening = false;
+  if (recognition) recognition.stop();
+  if (interimEl.textContent.trim()) addLine(interimEl.textContent);
+  interimEl.textContent = '';
+  setUI(false, keepStatus);
+}
+
+function setUI(on, keepStatus) {
+  $('toggle').textContent = on ? 'Stop' : 'Start';
+  $('toggle').classList.toggle('on', on);
+  $('dot').classList.toggle('on', on);
+  if (on) statusEl.textContent = 'Listening…';
+  else if (!keepStatus) statusEl.textContent = 'Stopped';
+}
+
+function plainText() {
+  return entries.map(e => e.text).join('\n');
+}
+
+async function copyText(text, onDone) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, text.length);
+    document.execCommand('copy');
+    ta.remove();
+  }
+  onDone && onDone();
+}
+
+$('toggle').onclick = () => listening ? stop() : start();
+
+$('copy').onclick = () => {
+  if (!entries.length) { statusEl.textContent = 'Nothing to copy yet'; return; }
+  copyText(plainText(), () => {
+    $('copy').textContent = 'Copied ✓'; $('copy').classList.add('done');
+    statusEl.textContent = 'Copied to clipboard';
+    setTimeout(() => { $('copy').textContent = 'Copy'; $('copy').classList.remove('done'); }, 1500);
+  });
+};
+
+// Two taps to clear, so a stray tap can't wipe the transcript.
+let clearArmed = false;
+$('clear').onclick = () => {
+  if (!clearArmed) {
+    clearArmed = true; $('clear').textContent = 'Tap again';
+    setTimeout(() => { clearArmed = false; $('clear').textContent = 'Clear'; }, 2500);
+    return;
+  }
+  clearArmed = false; $('clear').textContent = 'Clear';
+  entries = [];
+  linesEl.innerHTML = '';
+  interimEl.textContent = '';
+  $('empty').style.display = '';
+  startedAt = listening ? Date.now() : null;
+  store('lt-start', startedAt ? String(startedAt) : '');
+  save(); updateCount();
+  statusEl.textContent = 'Cleared';
+};
+
+$('lang').onchange = () => {
+  store('lt-lang', $('lang').value);
+  if (listening) { stop(); start(); }
+};
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !['SELECT', 'BUTTON', 'INPUT'].includes(e.target.tagName)) {
+    e.preventDefault(); $('toggle').click();
+  }
+});
+
+// Restore the previous transcript after a reload.
+try { entries = JSON.parse(load('lt-entries') || '[]'); } catch { entries = []; }
+startedAt = Number(load('lt-start')) || (entries.length ? Date.now() : null);
+entries.forEach(renderLine);
+updateCount();
+scrollDown();
+</script>
+</body>
+</html>
